@@ -1,0 +1,23 @@
+{
+  "name": "eden-spore",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "description": "3D web open-world survival game - Eden's Spore",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "vite",
+    "server": "node --disable-warning=ExperimentalWarning server/index.js",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}
