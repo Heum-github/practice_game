@@ -185,6 +185,27 @@ export class Inventory {
     return n;
   }
 
+  /**
+   * 지정 개수를 뺀다. 모자라면 아무것도 건드리지 않고 false.
+   *
+   * `takeOne` 은 한 칸에서 하나만 뺀다. 플랜트에 잔해를 한 몫(여러 개) 밀어
+   * 넣는 것처럼 여러 칸에 걸쳐 있을 수 있는 수량을 한 번에 걷어낼 때 쓴다.
+   */
+  remove(id: ItemId, count: number): boolean {
+    if (this.countOf(id) < count) return false;
+    let left = count;
+    for (let i = 0; i < this.slots.length && left > 0; i++) {
+      const slot = this.slots[i];
+      if (!slot || slot.id !== id) continue;
+      const take = Math.min(slot.count, left);
+      slot.count -= take;
+      left -= take;
+      if (slot.count <= 0) this.slots[i] = null;
+    }
+    this.emit();
+    return true;
+  }
+
   /** 지정 칸에서 하나 뺀다. 비면 칸을 비운다 */
   takeOne(index: number): ItemId | null {
     const slot = this.slots[index];

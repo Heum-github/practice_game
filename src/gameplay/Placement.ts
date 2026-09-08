@@ -258,4 +258,5 @@ const PLACED_MESSAGE: Partial<Record<BuildKind, string>> = {
   storage: '보관함을 놓았다',
   compost: '퇴비 더미를 놓았다',
   trap: '함정을 묻었다',
+  plant: '토양 재생 플랜트를 세웠다',
 };

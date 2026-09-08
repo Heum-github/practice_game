@@ -1,4 +1,4 @@
-import { COOK } from '../config';
+import { COOK, PLANT } from '../config';
 import type { Inventory } from './Inventory';
 import { itemDef, type ItemId } from './Items';
 
@@ -20,6 +20,14 @@ export interface Recipe {
   cookTime?: number;
   /** 처음에는 만들 줄 모르는 것 — 조감도 데이터를 읽어야 열린다 */
   locked?: boolean;
+  /**
+   * 종자고를 연 사람에게만 열린다.
+   *
+   * 조감도와 다른 문이다. 조감도는 폐허에서 주워 오는 것이라 "운이 좋았는가"를
+   * 물을 뿐이지만, 종자고는 기록 열 편을 다 읽어야 열린다 — 정착지 등급 2와
+   * 되살린 흙 24줌을 이미 지나온 사람만 통과하는 유일한 문이다.
+   */
+  needsVault?: boolean;
 }
 
 /**
@@ -188,6 +196,23 @@ export const RECIPES: Recipe[] = [
     station: 'workbench',
     locked: true,
   },
+
+  // ---------------------------------------------------------------- 종자고
+  {
+    id: 'soilPlant',
+    output: 'soilPlant',
+    outputCount: 1,
+    inputs: [
+      { id: 'scrap', count: PLANT.scrapCost },
+      { id: 'soil', count: PLANT.soilCost },
+    ],
+    // 흙을 만드는 물건을 흙 없이 세울 수 있으면 첫 대가 공짜가 되고,
+    // 둘째 대부터는 자기 산출을 도로 먹는다 — 대를 늘릴수록 늘리는 값이
+    // 비싸져 저절로 몇 대에서 멎는다 (docs/game/soil-plant.md).
+    note: '잔해를 흙으로 되돌린다 — 도는 동안 낮에 로봇을 부른다',
+    station: 'workbench',
+    needsVault: true,
+  },
 ];
 
 /** 조감도로 열 수 있는 레시피들 (등장 순서대로 열린다) */
@@ -205,6 +230,8 @@ export interface CraftContext {
   /** 화톳불 곁에 있는지 — 물을 끓이려면 불이 있어야 한다 */
   nearCampfire: boolean;
   unlocked: ReadonlySet<string>;
+  /** 종자고를 열었는지 — 유산으로 물려받은 것도 포함이다 */
+  vaultOpen: boolean;
 }
 
 /** 지금 만들 수 있는지, 못 만든다면 왜 */
@@ -214,6 +241,7 @@ export function craftBlocker(
   ctx: CraftContext,
 ): string | null {
   if (recipe.locked && !ctx.unlocked.has(recipe.id)) return '조감도가 필요하다';
+  if (recipe.needsVault && !ctx.vaultOpen) return '종자고 안에서 알게 되는 것이다';
   if (recipe.station === 'workbench' && !ctx.nearWorkbench) return '작업대 곁이어야 한다';
   // 꺼진 불은 불이 아니다 — fireDistance 가 연료 없는 화톳불을 이미 걸러낸다
   if (recipe.station === 'campfire' && !ctx.nearCampfire) return '타고 있는 화톳불 곁이어야 한다';

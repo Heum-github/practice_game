@@ -20,6 +20,7 @@ __eden.setFuel(0)         // 모든 불을 끈다 — 꺼진 밤을 바로 만�
 __eden.world()            // 계절·연차·포자 농도·되살림 (두 곡선의 현재값)
 __eden.skipDays(15)       // 다음 계절로 건너뛴다
 __eden.setRestored(50)    // 되살린 흙을 강제로 넣어 상승 곡선을 본다
+__eden.setRestored(50, 4) // 지난 생이 한 해를 난 상태 — 회차 2의 1일차를 흉내 낸다
 __eden.town()             // 정착지 등급·설비·두른 넓이·생존자
 __eden.story()            // 이야기 — 막마다 열렸는지, 잠겼다면 무엇 때문인지
 __eden.read(3)            // 기록을 세 편 읽어본다 (막의 문에 걸리면 이유를 돌려준다)
@@ -37,5 +38,7 @@ __eden.clearLegacy()      // 유산을 지우고 첫 생으로
 __eden.gotoNode('water')  // 가장 가까운 자원으로 이동
 __eden.resources()        // 남은 노드 통계
 __eden.buildings()        // 밭·집수기 통계
+__eden.plants()           // 토양 재생 플랜트 — 대마다 넣어둔 몫·꺼낼 흙·다음 한 줌까지
+                          //   noisyHere 가 true 면 지금 선 자리가 낮에 로봇을 부른다
 __eden.setTimeScale(300)  // 시간 배속 고정 (작물 성장 확인용)
 ```

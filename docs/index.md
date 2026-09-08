@@ -27,6 +27,7 @@
 | [06-open-questions.md](design/06-open-questions.md) | 6 | 남은 검토 사항 |
 | [07-risks.md](design/07-risks.md) | 7 | 리스크 |
 | [08-quality.md](design/08-quality.md) | 8 | 품질 설계 · **반복해서 지킬 규칙(8.3)** · 성능 예산 |
+| [09-visual.md](design/09-visual.md) | — | 시각 방향 부록 — "단조롭다" 진단과 값싼 개선 우선순위. GAME_PLANNING 장 번호는 안 씀(9장은 log가 씀) |
 
 가장 자주 열게 되는 것은 **[8.3 반복해서 지킬 규칙](design/08-quality.md)** 이다.
 작업하다 실제로 발목을 잡혔던 것만 모아둔 목록이라, 새 기능을 붙이기 전에 한 번 훑으면
@@ -54,6 +55,7 @@
 | [architecture.md](dev/architecture.md) | 파일 구조와 각 모듈이 맡은 것 |
 | [console.md](dev/console.md) | `__eden` 개발용 콘솔 훅 |
 | [backend.md](dev/backend.md) | 의존성 없는 Node 백엔드와 세이브 규약 |
+| [platform.md](dev/platform.md) | 프로토타입에서 유통까지 — 배포·계정·마이그레이션 선택지 |
 
 규칙과 성능 예산은 기획서 쪽에 있다 → [08-quality.md](design/08-quality.md)
 

@@ -1,4 +1,4 @@
-import { BUILD, FARM, GATHER, TIME, TOOL_GATHER_MULT } from '../config';
+import { BUILD, FARM, GATHER, PLANT, TIME, TOOL_GATHER_MULT } from '../config';
 import { DEG } from '../util/math';
 import { NODE_SPEC, type ResourceNode, type ResourceNodes } from '../world/ResourceNodes';
 import { Buildings, type Placed } from '../world/Buildings';
@@ -23,6 +23,8 @@ type Action =
   | { type: 'gate'; gate: Placed }
   | { type: 'feedCompost'; bin: Placed; item: ItemId }
   | { type: 'takeCompost'; bin: Placed }
+  | { type: 'feedPlant'; plant: Placed }
+  | { type: 'takePlant'; plant: Placed }
   | { type: 'openStorage'; box: Placed };
 
 interface Target {
@@ -233,6 +235,42 @@ export class InteractionSystem {
       };
     }
 
+    if (p.kind === 'plant') {
+      // 꺼낼 흙이 있으면 그것부터 — 퇴비와 같은 순서다
+      if (p.stored > 0) {
+        return {
+          action: { type: 'takePlant', plant: p },
+          label: `되돌린 흙을 꺼낸다 (${p.stored})`,
+          duration: PLANT.feedTime,
+        };
+      }
+      if (this.inventory.countOf('scrap') < PLANT.scrapPerSoil) {
+        if (p.moisture > 0) {
+          // 8.3 "대가가 화면에 안 나오면 대가가 아니다" — 도는 동안은
+          // 로봇을 부르고 있다는 사실이 여기서 읽혀야 한다.
+          const left = ((1 - p.growth) + (p.moisture - 1)) * PLANT.daysPerSoil;
+          return {
+            action: null,
+            label: `돌아가는 중 — 낮에 로봇을 부른다 · 다음 흙까지 ${dayText(left)}`,
+            duration: 0,
+          };
+        }
+        return {
+          action: null,
+          label: `잔해가 모자라다 — 한 몫에 ${PLANT.scrapPerSoil}개가 필요하다`,
+          duration: 0,
+        };
+      }
+      if (p.moisture >= PLANT.inputMax) {
+        return { action: null, label: '플랜트가 가득 찼다', duration: 0 };
+      }
+      return {
+        action: { type: 'feedPlant', plant: p },
+        label: `잔해를 플랜트에 밀어 넣는다 (${Math.round(p.moisture)}/${PLANT.inputMax})`,
+        duration: PLANT.feedTime,
+      };
+    }
+
     if (p.kind === 'collector') {
       if (p.stored <= 0) return null;
       return {
@@ -359,6 +397,30 @@ export class InteractionSystem {
         return;
       }
 
+      case 'feedPlant': {
+        if (!this.inventory.remove('scrap', PLANT.scrapPerSoil)) return;
+        const plant = action.plant;
+        plant.moisture = Math.min(PLANT.inputMax, plant.moisture + 1);
+        this.buildings.refresh(plant);
+        this.emit('잔해를 플랜트에 밀어 넣었다', '#8f9a6b');
+        return;
+      }
+
+      case 'takePlant': {
+        const plant = action.plant;
+        if (plant.stored <= 0) return;
+        const dropped = this.inventory.add('soil', 1);
+        if (dropped > 0) {
+          this.emit('가방이 가득 찼다', '#d98a4a');
+          return;
+        }
+        plant.stored -= 1;
+        this.buildings.refresh(plant);
+        // 퇴비와 같은 순간이다 — 되살린 흙이 여기서도 한 줌 는다.
+        this.emit('+1 흙 — 부순 것을 되돌렸다', '#8f9a6b', 'restore');
+        return;
+      }
+
       case 'gate': {
         const open = this.buildings.toggleGate(action.gate);
         this.emit(open ? '문을 열었다' : '문을 닫았다', '#a9926a');
@@ -459,6 +521,9 @@ function subject(a: Action): object {
     case 'feedCompost':
     case 'takeCompost':
       return a.bin;
+    case 'feedPlant':
+    case 'takePlant':
+      return a.plant;
     case 'openStorage':
       return a.box;
     default:

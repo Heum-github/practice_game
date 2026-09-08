@@ -52,6 +52,8 @@ export interface SaveState {
    * 환경 악화 곡선의 "상승 곡선" — 이게 빠지면 되살린 만큼이 새로고침에 사라진다.
    */
   restored?: number;
+  /** 지난 생들이 지나보낸 계절 수 (v0.6) — 옛 세이브에는 없으므로 없으면 0 */
+  worldSeasons?: number;
   /** 찾아낸 기록 조각 id */
   archive?: string[];
   /** 종자고를 열었는지 (v0.5) — 한 번 열린 문은 다시 닫히지 않는다 */

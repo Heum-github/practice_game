@@ -59,6 +59,7 @@ import {
   HANGAR,
   WATER_TOWER,
   MAST,
+  PLANT,
   VAULT,
   FARM,
   HAZARD,
@@ -118,6 +119,7 @@ const BUILD_LABEL: Partial<Record<BuildKind, string>> = {
   storage: '보관함',
   compost: '퇴비 더미',
   trap: '함정',
+  plant: '토양 재생 플랜트',
 };
 
 /** 이 속력을 넘으면 달리는 중으로 보고 소모를 가속한다 (걷기 3.4 / 달리기 6.2) */
@@ -132,6 +134,7 @@ const LANDMARK_STYLE: Partial<Record<BuildKind, { glyph: string; color: string }
   storage: { glyph: '箱', color: '#b08a58' },
   campfire: { glyph: '火', color: '#d98a4a' },
   plot: { glyph: '田', color: '#9dbd63' },
+  plant: { glyph: '再', color: '#8f9a6b' },
 };
 
 /** 설치 종류별 작업 시간 (s) */
@@ -145,6 +148,7 @@ const TILL_TIME: Record<string, number> = {
   gate: BUILD.wallTime,
   compost: FARM.buildTime,
   trap: BUILD.trapTime,
+  plant: PLANT.buildTime,
 };
 
 export class Game {
@@ -336,7 +340,16 @@ export class Game {
     saveTarget: '로컬',
     creatures: 0,
     lookMode: '드래그',
-    base: { ripe: 0, dry: 0, empty: 0, filled: 0, firesOut: 0, firesLow: 0, compostReady: 0 },
+    base: {
+      ripe: 0,
+      dry: 0,
+      empty: 0,
+      filled: 0,
+      firesOut: 0,
+      firesLow: 0,
+      soilReady: 0,
+      plantsRunning: 0,
+    },
   };
 
   constructor(container: HTMLElement) {
@@ -492,6 +505,8 @@ export class Game {
       unlocked: [...this.unlocked],
       guide: this.guide.serialize(),
       restored: this.env.restored,
+      // 되살린 몫만 싣고 세계의 나이를 빼면, 이어했을 때 곡선이 도로 젊어진다
+      worldSeasons: this.env.carriedSeasons,
       archive: this.archive.serialize(),
       vault: this.vault.isOpen,
       masts: this.masts.serialize(),
@@ -538,7 +553,7 @@ export class Game {
     // 새 세이브에는 일부러 비워둔 칸도 그대로 담겨 있으므로 건드리지 않는다.
     if (!state.bindings) this.inventory.rebindMissing();
     this.guide.restore(state.guide ?? 0);
-    this.env.reset(state.restored ?? 0);
+    this.env.reset(state.restored ?? 0, state.worldSeasons ?? 0);
     // 세이브에서 되살아난 설치물로 등급을 처음부터 다시 잰다
     this.settlement.reset();
     this.settlers.reset();
@@ -615,7 +630,11 @@ export class Game {
     for (const id of this.legacy.unlocked) this.unlocked.add(id);
     this.archive.restore(this.legacy.archive);
     this.archivePanel?.refresh();
-    this.env.reset(this.legacy.restored);
+    // 되살린 흙만 물려주고 세계의 나이를 지우면, 한 생에 38줌만 넘긴 다음
+    // 생은 1일차부터 곡선 바닥이라 세계가 더는 나빠지지 않는다 — 두 곡선의
+    // 경주(3.7)가 회차 2에서 끝나 버린다. 같은 시드의 같은 폐허이므로
+    // 지난 생들이 지나보낸 계절도 함께 물려받는다.
+    this.env.reset(this.legacy.restored, this.legacy.seasons);
     // 지난 생이 이미 다 읽었다면 결말도 이미 봤다 — 다시 띄우지 않는다
     this.storyShown = this.archive.complete;
     // 한 번 연 문은 다음 생에도 열려 있다. 여는 방법을 알았고 안의 것도
@@ -654,6 +673,7 @@ export class Game {
         unlocked: this.legacy.unlocked.length,
         archive: this.legacy.archive.length,
         restored: this.legacy.restored,
+        seasons: this.legacy.seasons,
         masts: this.legacy.masts.length,
         vault: this.legacy.vault,
       }),
@@ -781,7 +801,12 @@ export class Game {
       this.creatures = new Creatures(this.terrain, this.solids, this.buildings);
       // 격납고는 정착지 등급을 건너뛰고 낮에 로봇을 부른다 —
       // 거점이 커져서가 아니라 거기 잠들어 있던 것들이 깨는 것이다
-      this.creatures.setWakeZone((x, z) => this.hangar.wakesRobots(x, z));
+      // 플랜트도 같은 규칙으로 깨운다 — **거점이 아니라 장소가 부른다.**
+      // 세계를 되살리는 물건이 곧 자기를 위험하게 만드는 물건이다
+      // (docs/game/soil-plant.md · 기획서 3.6).
+      this.creatures.setWakeZone(
+        (x, z) => this.hangar.wakesRobots(x, z) || this.buildings.plantNoiseAt(x, z),
+      );
       this.ctx.scene.add(this.creatures.group);
 
       this.settlers = new Settlers(this.terrain, this.buildings);
@@ -888,6 +913,7 @@ export class Game {
           unlocked: [...this.unlocked],
           archive: this.archive.serialize(),
           restored: this.env.restored,
+          seasons: this.time.seasonsElapsed,
           days: this.time.day,
           rank: this.settlement.rank,
           vault: this.vault?.isOpen ?? false,
@@ -902,6 +928,7 @@ export class Game {
             unlocked: run.unlocked.length,
             archive: run.archive.length,
             restored: run.restored,
+            seasons: this.legacy.seasons,
             vault: run.vault,
             masts: run.masts.length,
           }),
@@ -963,6 +990,33 @@ export class Game {
       },
       /** 설치물 통계 */
       buildings: (): unknown => this.buildings.stats,
+      /**
+       * 플랜트 — 대마다 넣어둔 몫·꺼낼 흙·도는지, 그리고 지금 소리 안인지.
+       *
+       * 대가가 실제로 걸리는지는 화면으로 안 보인다. 돌아가는 대 곁에 서서
+       * `noisyHere` 가 true 인지, `__eden.setPhase(0.5)` 로 낮을 만들었을 때
+       * 로봇이 실제로 오는지가 이 설비의 검증 지점이다.
+       */
+      plants: (): unknown => {
+        const p = this.player.position;
+        return {
+          count: this.buildings.stats.plants,
+          running: this.buildings.stats.plantsRunning,
+          noisyHere: this.buildings.plantNoiseAt(p.x, p.z),
+          wakeRadius: PLANT.wakeRadius,
+          list: this.buildings.placed
+            .filter((b) => b.kind === 'plant')
+            .map((b) => ({
+              x: +b.x.toFixed(1),
+              z: +b.z.toFixed(1),
+              dist: +Math.hypot(b.x - p.x, b.z - p.z).toFixed(1),
+              input: b.moisture,
+              soil: b.stored,
+              nextSoilDays: +((1 - b.growth) * PLANT.daysPerSoil).toFixed(2),
+              running: Buildings.plantRunning(b),
+            })),
+        };
+      },
       /** 자원 노드 통계 */
       resources: (): unknown => ({
         ...this.resources.stats,
@@ -1134,6 +1188,9 @@ export class Game {
         trend: +this.env.trendOnly.toFixed(3),
         restored: this.env.restored,
         relief: +this.env.relief.toFixed(3),
+        // 이번 생이 지나온 계절과, 지난 생들이 이미 지나보낸 계절
+        seasonsThisRun: this.time.seasonsElapsed,
+        seasonsCarried: this.env.carriedSeasons,
       }),
       /** 며칠 뒤로 건너뛴다 — 계절이 바뀌는 순간을 바로 본다 */
       skipDays: (n = 1): unknown => {
@@ -1144,8 +1201,15 @@ export class Game {
         return { day: this.time.day, season: this.time.season.name };
       },
       /** 되살린 흙을 강제로 넣는다 — 상승 곡선 확인용 */
-      setRestored: (n: number): void => {
-        this.env.reset(Math.max(0, n));
+      /**
+       * 되살린 흙을 강제로 넣는다. 세계의 나이는 건드리지 않는다.
+       *
+       * `reset` 이 둘을 함께 초기화하므로, 지금 값을 도로 넣어주지 않으면
+       * 이 훅이 조용히 세계를 젊게 만든다 — 곡선을 보려고 부른 훅이
+       * 곡선을 바꾸는 셈이다. 회차 2를 흉내 내려면 두 번째 인자를 준다.
+       */
+      setRestored: (n: number, carriedSeasons = this.env.carriedSeasons): void => {
+        this.env.reset(Math.max(0, n), Math.max(0, carriedSeasons));
         this.env.update(this.time);
       },
       /** 화톳불마다 남은 연료 (분) — 꺼지는 순간을 확인할 때 */
@@ -2046,6 +2110,8 @@ export class Game {
         this.buildings.fireDistance(this.player.position.x, this.player.position.z) <=
         BUILD.workbenchRadius,
       unlocked: this.unlocked,
+      // 플랜트는 조감도가 아니라 종자고가 연다. 유산으로 물려받은 것도 열린 것이다
+      vaultOpen: this.vault.isOpen,
     };
   }
 
@@ -2407,7 +2473,8 @@ export class Game {
       filled: b.filled,
       firesOut: b.firesOut,
       firesLow: b.firesLow,
-      compostReady: b.compostReady,
+      soilReady: b.soilReady,
+      plantsRunning: b.plantsRunning,
     };
     this.playerHud.setBase(s.base);
     s.lookMode = this.input.locked

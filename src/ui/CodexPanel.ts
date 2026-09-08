@@ -1,4 +1,4 @@
-import { FARM } from '../config';
+import { FARM, PLANT } from '../config';
 import { itemDef, type ItemId } from '../gameplay/Items';
 import { itemIcon } from './ItemIcons';
 
@@ -125,6 +125,26 @@ const ENTRIES: CodexEntry[] = [
       ['한 번에', `${FARM.compostInputMax}몫까지`],
       ['삭는 데', `한 몫에 ${FARM.compostDays}일 (약 21분)`],
       ['나오는 것', `흙 1 — 최대 ${FARM.compostCapacity}까지 쌓아둔다`],
+    ],
+  },
+  {
+    tab: '땅과 계절',
+    id: 'soilPlant',
+    tagline: '토양 재생 2단계 — 부순 것을 되돌린다',
+    body:
+      '퇴비는 키운 것을 삭힌다. 이건 부순 것을 되돌린다 — 이 세계에서\n' +
+      '가장 흔한 잔해를 가장 귀한 흙으로 바꾼다.\n\n' +
+      '공짜는 아니다. 도는 동안 소리와 열을 내고, 그 반경 안이면 정착지\n' +
+      '등급과 무관하게 낮에 로봇이 깨어난다. 넣어둔 몫이 바닥나면\n' +
+      '스스로 조용해지니, 한 통을 채우는 일은 곧 며칠을 시끄럽게 둘\n' +
+      '것인가를 고르는 일이다.',
+    facts: [
+      ['제작', `잔해 ${PLANT.scrapCost} · 흙 ${PLANT.soilCost} (작업대 · 종자고를 연 뒤)`],
+      ['넣는 것', `잔해 ${PLANT.scrapPerSoil} = 한 몫`],
+      ['한 번에', `${PLANT.inputMax}몫까지`],
+      ['도는 데', `한 몫에 ${PLANT.daysPerSoil}일`],
+      ['나오는 것', `흙 1 — 최대 ${PLANT.capacity}까지 쌓아둔다`],
+      ['대가', `도는 동안 ${PLANT.wakeRadius}m 안이면 등급과 무관하게 낮에 로봇`],
     ],
   },
   {

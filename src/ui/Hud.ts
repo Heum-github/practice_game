@@ -37,7 +37,10 @@ export interface HudState {
     filled: number;
     firesOut: number;
     firesLow: number;
-    compostReady: number;
+    /** 꺼낼 흙이 준비된 설비 수 — 퇴비 더미와 플랜트를 합친다 */
+    soilReady: number;
+    /** 지금 돌아가는 플랜트 수 — 낮에 로봇을 부르고 있는 대수 */
+    plantsRunning: number;
   };
   /** 잔류 포자 농도 — "1.24배 (되살림 0.10)" */
   hazard: string;

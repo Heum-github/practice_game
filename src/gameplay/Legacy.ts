@@ -30,6 +30,14 @@ export interface LegacyData {
   archive: string[];
   /** 퇴비로 되살린 흙의 누적 — 땅에 돌려준 몫이라 남는다 */
   restored: number;
+  /**
+   * 지난 생들이 지나보낸 계절의 누적.
+   *
+   * 되살린 흙이 대를 잇는다면 세계가 늙은 만큼도 함께 넘어가야 한다 —
+   * 같은 시드의 같은 폐허이므로 지난 생이 겪은 세월이 사라질 이유가 없다
+   * (docs/game/environment.md 의 상승 곡선을 회차 너머까지 참으로 만드는 값이다).
+   */
+  seasons: number;
   /** 가장 오래 버틴 날 */
   bestDays: number;
   /** 가장 크게 키운 정착지 등급 */
@@ -59,6 +67,7 @@ function empty(): LegacyData {
     unlocked: [],
     archive: [],
     restored: 0,
+    seasons: 0,
     bestDays: 0,
     bestRank: 0,
     vault: false,
@@ -83,6 +92,7 @@ export function loadLegacy(): LegacyData {
       unlocked: Array.isArray(data.unlocked) ? data.unlocked.filter(isText) : [],
       archive: Array.isArray(data.archive) ? data.archive.filter(isText) : [],
       restored: numberOr(data.restored, 0),
+      seasons: numberOr(data.seasons, 0),
       bestDays: numberOr(data.bestDays, 0),
       bestRank: numberOr(data.bestRank, 0),
       vault: data.vault === true,
@@ -106,6 +116,8 @@ export function recordDeath(
     unlocked: string[];
     archive: string[];
     restored: number;
+    /** 이번 생에서 지나보낸 계절 수 — 세계 나이도 흙처럼 누적된다 */
+    seasons: number;
     days: number;
     rank: number;
     vault: boolean;
@@ -121,6 +133,7 @@ export function recordDeath(
     unlocked: [...new Set([...prev.unlocked, ...run.unlocked])],
     archive: [...new Set([...prev.archive, ...run.archive])],
     restored: prev.restored + Math.max(0, run.restored),
+    seasons: prev.seasons + Math.max(0, run.seasons),
     bestDays: Math.max(prev.bestDays, run.days),
     bestRank: Math.max(prev.bestRank, run.rank),
   };
@@ -153,6 +166,8 @@ export function legacyLines(run: {
   unlocked: number;
   archive: number;
   restored: number;
+  /** 이 세계가 대를 이어 지나보낸 계절 수 — 되살린 흙과 나란히 선다 */
+  seasons?: number;
   vault?: boolean;
   masts?: number;
 }): string[] {
@@ -160,6 +175,9 @@ export function legacyLines(run: {
   if (run.unlocked > 0) kept.push(`해독한 설계 ${run.unlocked}가지`);
   if (run.archive > 0) kept.push(`되찾은 기록 ${run.archive}편`);
   if (run.restored > 0) kept.push(`되살린 흙 ${Math.round(run.restored)}줌`);
+  if (run.seasons && Math.floor(run.seasons) > 0) {
+    kept.push(`이 세계가 난 계절 ${Math.floor(run.seasons)}번`);
+  }
   if (run.masts) kept.push(`눈에 담은 일대 ${run.masts}곳`);
   if (run.vault) kept.push('열어둔 종자고');
   return kept;

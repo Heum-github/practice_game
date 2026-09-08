@@ -36,7 +36,8 @@ export type ItemId =
   | 'codex'
   | 'compostBin'
   | 'trap'
-  | 'vaultKey';
+  | 'vaultKey'
+  | 'soilPlant';
 
 /** 땅에 설치할 수 있는 것 */
 export type BuildKind =
@@ -48,7 +49,8 @@ export type BuildKind =
   | 'workbench'
   | 'storage'
   | 'compost'
-  | 'trap';
+  | 'trap'
+  | 'plant';
 
 export interface ConsumeEffect {
   hunger?: number;
@@ -370,6 +372,16 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     description:
       '날 선 철판을 세워 묻은 자리. 밟으면 크게 다친다. 로봇에게는 불빛이 통하지 않으니 길목에 이것을 둔다.',
     places: 'trap',
+  },
+  soilPlant: {
+    id: 'soilPlant',
+    name: '토양 재생 플랜트',
+    glyph: '再',
+    stack: 3,
+    color: '#8f9a6b',
+    description:
+      '콘크리트를 분해해 흙으로 되돌린다. 잔해를 넣으면 흙이 나온다 — 대신 도는 동안 낮에 로봇을 부른다.',
+    places: 'plant',
   },
   blueprint: {
     id: 'blueprint',

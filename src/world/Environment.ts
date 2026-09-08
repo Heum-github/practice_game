@@ -32,9 +32,20 @@ export class Environment {
   /** 계절이 바뀌는 순간을 잡기 위한 직전 계절 */
   private lastSeason = -1;
 
+  /**
+   * 지난 생들이 이미 지나보낸 계절 수.
+   *
+   * `restored`(하강을 끌어내리는 몫)는 유산으로 대를 잇는데 `time.seasonsElapsed`
+   * (밀어올리는 몫)는 매 생 0에서 시작하면, 한 생 만에 되살림이 하한을 넘긴
+   * 다음 생은 1일차부터 이미 바닥이고 그 뒤로 세계가 더는 변하지 않는다.
+   * 같은 시드의 같은 폐허이니 세계의 나이도 사람처럼 대를 이어야 저울이 산다.
+   */
+  private carried = 0;
+
   update(time: GameTime): void {
     // 장기 추세는 제 천장에서 멈춘다
-    const rise = Math.min(HAZARD.base + time.seasonsElapsed * HAZARD.perSeason, HAZARD.trendMax);
+    const seasons = this.carried + time.seasonsElapsed;
+    const rise = Math.min(HAZARD.base + seasons * HAZARD.perSeason, HAZARD.trendMax);
     const relief = this.restored * HAZARD.reliefPerSoil;
     this.trend = clamp(rise - relief, HAZARD.minDensity, HAZARD.trendMax);
 
@@ -79,9 +90,15 @@ export class Environment {
     return first ? -1 : now;
   }
 
-  /** 이어하기·초기화용 */
-  reset(restored = 0): void {
+  /** 지난 생들이 지나보낸 계절 수 — 세이브·유산·개발 훅이 읽는다 */
+  get carriedSeasons(): number {
+    return this.carried;
+  }
+
+  /** 이어하기·초기화용. 세이브 이어받기와 유산 승계가 같은 시그니처를 쓴다 */
+  reset(restored = 0, carriedSeasons = 0): void {
     this.restored = restored;
+    this.carried = carriedSeasons;
     this.trend = HAZARD.base;
     this.effective = HAZARD.base;
     this.lastSeason = -1;

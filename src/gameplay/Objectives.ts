@@ -30,6 +30,8 @@ export interface ObjectiveContext {
     collectors: number;
     compost: number;
     traps: number;
+    /** 세운 토양 재생 플랜트 수 */
+    plants: number;
   };
   /** 정착지 등급 */
   rank: number;
@@ -219,6 +221,14 @@ export const OBJECTIVES: Objective[] = [
     title: '종자고를 연다',
     hint: '분화구 언저리에 반쯤 파묻힌 문이 있다. 열쇠는 처음부터 가방에 있었다.',
     done: (c) => c.vaultOpen,
+  },
+  // 종자고를 연 다음에도 할 일이 있어야 한다 — 진실이 밝혀지는 것과
+  // 그걸로 뭘 할 수 있는가는 다른 문제다 (docs/log/playtest-v0.5.md D).
+  {
+    id: 'soilPlant',
+    title: '토양 재생 플랜트를 세운다',
+    hint: '이제야 알겠다 — 부순 것도 되돌릴 수 있었다. 작업대 곁에서 만든다.',
+    done: (c) => c.base.plants >= 1,
   },
 ];
 

@@ -202,7 +202,7 @@ export class PlayerHud {
     // 수확할 것과 목마른 밭의 개수만 띄워도 그 왕복이 사라진다.
     this.baseBar = document.createElement('div');
     this.baseBar.className = 'basebar';
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       const chip = document.createElement('div');
       chip.className = 'basebar__chip basebar__chip--hidden';
       this.baseBar.appendChild(chip);
@@ -609,20 +609,26 @@ export class PlayerHud {
     filled: number;
     firesOut: number;
     firesLow: number;
-    compostReady: number;
+    /** 꺼낼 흙이 준비된 설비 수 — 퇴비 더미와 플랜트를 합친다 */
+    soilReady: number;
+    /** 지금 돌아가는 플랜트 수 — 낮에 로봇을 부르고 있는 대수 */
+    plantsRunning: number;
   }): void {
     const key =
       `${base.ripe}|${base.dry}|${base.empty}|${base.filled}` +
-      `|${base.firesOut}|${base.firesLow}|${base.compostReady}`;
+      `|${base.firesOut}|${base.firesLow}|${base.soilReady}|${base.plantsRunning}`;
     if (key === this.lastBaseKey) return;
     this.lastBaseKey = key;
 
     // 불이 가장 앞이다. 밭은 하루 늦어도 되지만 꺼진 불은 그 밤에 바로 걸린다.
+    // 돌아가는 플랜트는 불 바로 다음이다 — 낮에 로봇을 부르는 대가가
+    // 화면에서 눈에 띄지 않으면 대가가 아니다 (8.3).
     const rows: Array<[number, string, string]> = [
       [base.firesOut, `꺼진 불 ${base.firesOut}`, '#c4564e'],
       [base.firesLow, `사위는 불 ${base.firesLow}`, '#d98a4a'],
+      [base.plantsRunning, `플랜트 ${base.plantsRunning}대 가동 — 낮에 로봇`, '#c4564e'],
       [base.ripe, `수확 ${base.ripe}`, '#9dbd63'],
-      [base.compostReady, `삭은 흙 ${base.compostReady}`, '#a3763f'],
+      [base.soilReady, `꺼낼 흙 ${base.soilReady}`, '#a3763f'],
       [base.dry, `목마름 ${base.dry}`, '#d98a4a'],
       [base.empty, `빈 밭 ${base.empty}`, '#8e948a'],
       [base.filled, `고인 물 ${base.filled}`, '#5b8fa8'],

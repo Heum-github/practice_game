@@ -88,6 +88,15 @@ const ICONS: Record<ItemId, string> = {
     <path d="M12 7c0-2 1.6-3.2 3-3.2 0 2-1.2 3.2-3 3.2zM12 8.4c0-1.7-1.4-2.8-2.6-2.8 0 1.7 1 2.8 2.6 2.8z"
       fill="#8fae5a"/>`,
 
+  // 토양 재생 플랜트 — 서 있는 기계 몸체에 배기관. 퇴비(둥근 통+새싹)와
+  // 실루엣이 갈라지도록 각진 몸통과 위로 뻗은 관으로 그린다.
+  soilPlant: `<rect x="5" y="9" width="12" height="11" rx="1" fill="currentColor"/>
+    <rect x="7.5" y="12" width="7" height="5" rx=".5" fill="#0004"/>
+    <rect x="12" y="4" width="2.4" height="6" rx=".6" fill="currentColor" opacity=".85"/>
+    <path d="M13.2 4c-.9-1.3.9-1.7 0-3" fill="none" stroke="#c9cfb8" stroke-width="1.2"
+      stroke-linecap="round" opacity=".8"/>
+    <path d="M5 9l2.5-3h7L17 9z" fill="currentColor" opacity=".7"/>`,
+
   // 여닫이 문 — 문틀과 살짝 열린 문짝
   gate: `<path d="M4 3v18M20 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     <path d="M4 3h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

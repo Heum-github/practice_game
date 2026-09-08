@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cropStages } from './CropShapes';
-import { BUILD, FARM } from '../config';
+import { BUILD, FARM, PLANT } from '../config';
 import { Terrain } from './Terrain';
 import { clamp, Rng } from '../util/math';
 import { ColliderWorld } from './Collision';
@@ -92,6 +92,7 @@ const SOLID: Partial<Record<BuildKind, { half: number; height: number }>> = {
   workbench: { half: 0.56, height: 0.98 },
   storage: { half: 0.48, height: 0.72 },
   compost: { half: 0.5, height: 0.66 },
+  plant: { half: 0.58, height: 1.24 },
 };
 
 /**
@@ -111,6 +112,7 @@ const REFUND: Partial<Record<BuildKind, ItemId>> = {
   storage: 'storageBox',
   compost: 'compostBin',
   trap: 'trap',
+  plant: 'soilPlant',
 };
 /**
  * 종류 표 — 새 설치물을 더할 때 **여기 한 곳만** 채우면 된다.
@@ -132,6 +134,7 @@ const KIND_TABLE: Record<BuildKind, true> = {
   storage: true,
   compost: true,
   trap: true,
+  plant: true,
 };
 const ALL_KINDS = Object.keys(KIND_TABLE) as BuildKind[];
 const CELL = 1;
@@ -166,6 +169,9 @@ export class Buildings {
   private wallMesh!: THREE.InstancedMesh;
   private gateMesh!: THREE.InstancedMesh;
   private compostMesh!: THREE.InstancedMesh;
+  private plantMesh!: THREE.InstancedMesh;
+  /** 돌아가는 동안만 보이는 배기 — 멀리서도 "지금 시끄럽다"가 읽힌다 */
+  private plantVentMesh!: THREE.InstancedMesh;
   private trapMesh!: THREE.InstancedMesh;
   private fireMesh!: THREE.InstancedMesh;
   private flameMesh!: THREE.InstancedMesh;
@@ -451,6 +457,8 @@ export class Buildings {
         return [this.trapMesh];
       case 'compost':
         return [this.compostMesh];
+      case 'plant':
+        return [this.plantMesh, this.plantVentMesh];
       case 'workbench':
         return [this.benchMesh];
       case 'storage':
@@ -485,6 +493,31 @@ export class Buildings {
   }
 
   // ---------------------------------------------------------------- 불빛
+
+  /**
+   * 지금 돌아가는 플랜트인지.
+   *
+   * 넣어둔 몫이 남아 있고, 아직 받아둘 자리가 있을 때만 돈다.
+   * 가득 찬 채로 멎어 있는 동안에도 로봇을 부르면 대가만 치르고
+   * 아무것도 안 나오는 구간이 된다 — 그건 저울이 아니라 벌이다.
+   */
+  static plantRunning(node: Placed): boolean {
+    return node.kind === 'plant' && node.moisture > 0 && node.stored < PLANT.capacity;
+  }
+
+  /**
+   * 이 지점이 돌아가는 플랜트의 소리 안인지.
+   *
+   * 격납고와 같은 규칙이다 — 정착지 등급이 아니라 **장소가 부른다**.
+   * 매 프레임 생성 판정에서 불리므로 배열을 만들지 않는다 (8.3).
+   */
+  plantNoiseAt(x: number, z: number): boolean {
+    for (const p of this.byKind.plant) {
+      if (!Buildings.plantRunning(p)) continue;
+      if (Math.hypot(p.x - x, p.z - z) <= PLANT.wakeRadius) return true;
+    }
+    return false;
+  }
 
   /** 지금 타고 있는 불인지. 꺼진 불은 아무 일도 하지 않는다 */
   static lit(node: Placed): boolean {
@@ -744,6 +777,27 @@ export class Buildings {
     }
     if (compostDirty) this.flush('compost');
 
+    // ---- 잔해가 분해되어 흙이 된다 (docs/game/soil-plant.md)
+    //
+    // 퇴비와 같은 구조에 값만 다르다 — 넣어둔 몫(moisture)이 한 줌씩
+    // 삭아(growth) 꺼낼 수 있는 흙(stored)이 된다. 다른 것은 **대가**다.
+    // 도는 동안 낮에 로봇을 부르므로(plantNoiseAt), 넣어둔 몫이 바닥나면
+    // 스스로 조용해지는 것이 이 설비의 저울이다.
+    let plantDirty = false;
+    for (const p of this.byKind.plant) {
+      if (!Buildings.plantRunning(p)) continue;
+      p.growth += days / PLANT.daysPerSoil;
+      if (p.growth < 1) continue;
+
+      p.growth = 0;
+      p.moisture -= 1;
+      p.stored += 1;
+      // 마지막 몫을 삼켰거나 통이 찼으면 여기서 배기가 꺼진다
+      this.writeInstance(p);
+      plantDirty = true;
+    }
+    if (plantDirty) this.flush('plant');
+
     // ---- 연료가 탄다
     //
     // 사위는 모습은 연속이지만 인스턴스는 단계로만 다시 쓴다. 매 프레임
@@ -974,6 +1028,46 @@ export class Buildings {
   }
 
   /**
+   * 토양 재생 플랜트 — 잔해를 삼켜 흙을 뱉는 기계.
+   *
+   * 퇴비 더미와 한눈에 갈라져야 한다. 퇴비가 흙빛의 낮은 통이라면 이쪽은
+   * **서 있는 기계**다 — 통이 허리 높이로 서고, 위에 투입구가 벌어져 있고,
+   * 옆구리에 배기관이 붙는다. 도는 동안만 배기가 보인다(writeInstance).
+   */
+  private static plantGeometry(): THREE.BufferGeometry {
+    const shell = new THREE.Color(0x7c8470);
+    const dark = new THREE.Color(0x4c5245);
+    const rust = new THREE.Color(0x8a5f3c);
+    const soil = new THREE.Color(0x5a4526);
+    return mergeBoxes([
+      // 받침 — 땅에 닿는 네 발 대신 낮은 판 하나. 발을 나누면 기복에서 뜬다
+      { x: 0, y: 0.09, z: 0, w: 1.02, h: 0.18, d: 0.86, color: dark },
+      // 몸통
+      { x: 0, y: 0.6, z: 0, w: 0.9, h: 0.84, d: 0.74, color: shell },
+      // 테를 두른 이음매 — 완전한 평면을 만들지 않는다 (8.3)
+      { x: 0, y: 0.44, z: 0, w: 0.96, h: 0.08, d: 0.8, color: dark },
+      { x: 0, y: 0.86, z: 0, w: 0.96, h: 0.07, d: 0.8, color: dark },
+      // 투입구 — 위가 벌어져 있다
+      { x: 0, y: 1.08, z: -0.08, w: 0.62, h: 0.22, d: 0.5, color: rust },
+      { x: 0, y: 1.16, z: -0.08, w: 0.5, h: 0.08, d: 0.38, color: dark },
+      // 배출구와 그 아래 쌓인 흙
+      { x: 0.42, y: 0.3, z: 0.3, w: 0.22, h: 0.22, d: 0.22, color: rust },
+      { x: 0.46, y: 0.12, z: 0.36, w: 0.36, h: 0.12, d: 0.3, color: soil },
+      // 배기관
+      { x: -0.4, y: 1.06, z: 0.22, w: 0.16, h: 0.5, d: 0.16, color: rust },
+    ]);
+  }
+
+  /** 돌아갈 때만 얹히는 배기 — 형체가 아니라 신호다 */
+  private static plantVentGeometry(): THREE.BufferGeometry {
+    const smoke = new THREE.Color(0x9aa2a8);
+    return mergeBoxes([
+      { x: -0.4, y: 0.1, z: 0.22, w: 0.22, h: 0.2, d: 0.22, color: smoke },
+      { x: -0.36, y: 0.32, z: 0.26, w: 0.16, h: 0.16, d: 0.16, color: smoke },
+    ]);
+  }
+
+  /**
    * 여닫이 문 — 방벽 사이에 낀 철판 문짝.
    *
    * 방벽과 확실히 달라 보여야 한다. 둘러친 벽을 한 바퀴 돌면서
@@ -1138,6 +1232,38 @@ export class Buildings {
     this.compostMesh.castShadow = true;
     this.compostMesh.receiveShadow = true;
     this.group.add(this.compostMesh);
+
+    // 토양 재생 플랜트 — 잔해를 흙으로 되돌린다
+    this.plantMesh = new THREE.InstancedMesh(
+      Buildings.plantGeometry(),
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.72,
+        metalness: 0.35,
+        flatShading: true,
+      }),
+      MAX_PLACED,
+    );
+    this.plantMesh.name = 'build:plant';
+    this.plantMesh.count = 0;
+    this.plantMesh.castShadow = true;
+    this.plantMesh.receiveShadow = true;
+    this.group.add(this.plantMesh);
+
+    this.plantVentMesh = new THREE.InstancedMesh(
+      Buildings.plantVentGeometry(),
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 1,
+        transparent: true,
+        opacity: 0.5,
+        flatShading: true,
+      }),
+      MAX_PLACED,
+    );
+    this.plantVentMesh.name = 'build:plantVent';
+    this.plantVentMesh.count = 0;
+    this.group.add(this.plantVentMesh);
 
     // 여닫이 문 — 같은 자리에 서지만 판이 얇고 경첩이 보인다
     this.gateMesh = new THREE.InstancedMesh(
@@ -1402,6 +1528,27 @@ export class Buildings {
       return;
     }
 
+    if (node.kind === 'plant') {
+      this.v.set(node.x, node.y, node.z);
+      this.s.setScalar(1);
+      this.q.identity();
+      this.m.compose(this.v, this.q, this.s);
+      this.plantMesh.setMatrixAt(node.index, this.m);
+      this.plantMesh.count = this.byKind.plant.length;
+
+      // 도는 중일 때만 배기가 선다 — 숫자를 열어보지 않아도
+      // "지금 이 자리가 시끄럽다"가 멀리서 읽힌다
+      if (Buildings.plantRunning(node)) {
+        this.v.set(node.x, node.y + 1.3, node.z);
+        this.m.compose(this.v, this.q, this.s);
+        this.plantVentMesh.setMatrixAt(node.index, this.m);
+      } else {
+        this.plantVentMesh.setMatrixAt(node.index, ZERO_MATRIX);
+      }
+      this.plantVentMesh.count = this.byKind.plant.length;
+      return;
+    }
+
     if (node.kind === 'workbench' || node.kind === 'storage') {
       const mesh = node.kind === 'workbench' ? this.benchMesh : this.boxMesh;
       this.v.set(node.x, node.y, node.z);
@@ -1492,6 +1639,10 @@ export class Buildings {
         return;
       case 'compost':
         this.compostMesh.instanceMatrix.needsUpdate = true;
+        return;
+      case 'plant':
+        this.plantMesh.instanceMatrix.needsUpdate = true;
+        this.plantVentMesh.instanceMatrix.needsUpdate = true;
         return;
       case 'trap':
         this.trapMesh.instanceMatrix.needsUpdate = true;
@@ -1645,10 +1796,19 @@ export class Buildings {
     firesOut: number;
     /** 곧 꺼질 화톳불 */
     firesLow: number;
-    /** 꺼낼 수 있는 흙이 삭아 있는 퇴비 더미 */
-    compostReady: number;
+    /**
+     * 꺼낼 수 있는 흙이 준비된 설비 수 — 퇴비 더미와 플랜트를 함께 센다.
+     *
+     * 둘은 만드는 방식이 다르지만 플레이어가 할 일은 하나다("가서 꺼내라").
+     * 알림을 설비마다 나누면 같은 뜻의 칩이 둘 늘어날 뿐이다.
+     */
+    soilReady: number;
     /** 퇴비 더미 수 — 정착지 등급이 설비로 센다 */
     compost: number;
+    /** 토양 재생 플랜트 수 */
+    plants: number;
+    /** 그중 지금 돌아가는 것 — 낮에 로봇을 부르고 있는 대수다 */
+    plantsRunning: number;
   } {
     // 매 프레임 호출되므로 filter를 네 번 돌려 배열을 네 개 만들지 않는다
     let ripe = 0;
@@ -1669,8 +1829,13 @@ export class Buildings {
       else if (f.fuel < BUILD.fuelLowLevel) firesLow++;
     }
 
-    let compostReady = 0;
-    for (const b of this.byKind.compost) if (b.stored > 0) compostReady++;
+    let soilReady = 0;
+    for (const b of this.byKind.compost) if (b.stored > 0) soilReady++;
+    let plantsRunning = 0;
+    for (const p of this.byKind.plant) {
+      if (p.stored > 0) soilReady++;
+      if (Buildings.plantRunning(p)) plantsRunning++;
+    }
 
     return {
       plots: this.plots.length,
@@ -1683,8 +1848,10 @@ export class Buildings {
       filled,
       firesOut,
       firesLow,
-      compostReady,
+      soilReady,
       compost: this.byKind.compost.length,
+      plants: this.byKind.plant.length,
+      plantsRunning,
     };
   }
 
@@ -1705,7 +1872,7 @@ export class Buildings {
     source?: Placed;
   }> {
     out.length = 0;
-    for (const kind of ['workbench', 'storage', 'campfire'] as BuildKind[]) {
+    for (const kind of ['workbench', 'storage', 'campfire', 'plant'] as BuildKind[]) {
       for (const node of this.byKind[kind]) {
         out.push({ x: node.x, z: node.z, kind, source: node });
       }
@@ -1747,6 +1914,7 @@ export class Buildings {
     collectors: number;
     compost: number;
     traps: number;
+    plants: number;
   } {
     let planted = 0;
     let watered = 0;
@@ -1766,6 +1934,7 @@ export class Buildings {
       collectors: this.byKind.collector.length,
       compost: this.byKind.compost.length,
       traps: this.byKind.trap.length,
+      plants: this.byKind.plant.length,
     };
   }
 
